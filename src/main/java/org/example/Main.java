@@ -4,8 +4,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.example.servlet.ClienteServlet;
 import org.example.servlet.PedidoServlet;
-//import org.example.servlet.ClienteServlet;
-//import org.example.servlet.ProductoServlet;
+import org.example.servlet.ProductoServlet;
 
 public class Main {
 
@@ -22,7 +21,7 @@ public class Main {
         // Registrar servlets
         context.addServlet(new ServletHolder(new PedidoServlet()), "/pedidos/*");
         context.addServlet(new ServletHolder(new ClienteServlet()), "/clientes/*");
-        // context.addServlet(new ServletHolder(new ProductoServlet()), "/productos/*");
+        context.addServlet(new ServletHolder(new ProductoServlet()), "/productos/*");
 
         // Arrancar servidor
         try {

@@ -22,7 +22,7 @@ public class Pedido {
     @JoinColumn(name = "cliente_id")
     private Cliente cliente;
     // Relación unidireccional: Pedido -> Producto
-    @OneToMany
+    @ManyToMany
     @JoinColumn(name = "pedido_id") // crea la FK en la tabla de Producto
     private List<Producto> productos;
     private LocalDate fecha;

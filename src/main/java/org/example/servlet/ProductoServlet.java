@@ -1,7 +1,4 @@
 package org.example.servlet;
-//La capa servlet cumple el papel de controlador,es decir, recibe las peticiones HTTP
-//es la “puerta de entrada” del backend.
-
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
@@ -9,30 +6,23 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.example.dao.ClienteDAO;
-import org.example.dao.PedidoDAO;
 import org.example.dao.ProductoDAO;
-import org.example.dto.PedidoDTO;
+import org.example.dto.ProductoDTO;
 import org.example.mapper.MapperUtil;
-import org.example.model.Cliente;
-import org.example.model.Pedido;
 import org.example.model.Producto;
+import org.example.service.ProductoService;
 
 import java.io.IOException;
-import java.time.LocalDate;
 import java.util.List;
-import java.util.stream.Collectors;
 
-@WebServlet("/pedidos/*")
+@WebServlet("/productos/*")
 public class ProductoServlet extends HttpServlet {
 
-    private PedidoDAO pedidoDAO = new PedidoDAO();
-    private ClienteDAO clienteDAO = new ClienteDAO();
-    private ProductoDAO productoDAO = new ProductoDAO();
-    private ObjectMapper mapper = new ObjectMapper();
+    private final ProductoDAO productoDAO = new ProductoDAO();
+    private final ObjectMapper mapper = new ObjectMapper();
 
     // =========================================================
-    // GET
+    // GET (Buscar todos o por ID)
     // =========================================================
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
@@ -40,39 +30,33 @@ public class ProductoServlet extends HttpServlet {
 
         resp.setContentType("application/json;charset=UTF-8");
 
-        String pathInfo = req.getPathInfo(); // ej: /1 o null
+        ProductoService productoService = new ProductoService(productoDAO);
+        String pathInfo = req.getPathInfo();
 
-        if (pathInfo == null || pathInfo.equals("/")) {
-            // ---- Muestra todos ----
-            List<Pedido> pedidos = pedidoDAO.listar();
-            List<PedidoDTO> pedidosDTO = pedidos.stream()
-                    .map(MapperUtil::toPedidoDTO)
-                    .collect(Collectors.toList());
-            mapper.writeValue(resp.getWriter(), pedidosDTO);
-
-        } else {
-            // ---- Muestra por id ----
-            try {
+        try {
+            if (pathInfo == null || pathInfo.equals("/")) {
+                // ---- Listar todos ----
+                List<ProductoDTO> productosDTO = productoService.listarProductos();
+                mapper.writeValue(resp.getWriter(), productosDTO);
+            } else {
+                // ---- Buscar por ID ----
                 Long id = Long.parseLong(pathInfo.substring(1));
-                Pedido pedido = pedidoDAO.buscarPorId(id);
-
-                if (pedido != null) {
-                    PedidoDTO dto = MapperUtil.toPedidoDTO(pedido);
-                    mapper.writeValue(resp.getWriter(), dto);
-                } else {
-                    resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                    resp.getWriter().write("{\"error\":\"Pedido no encontrado\"}");
-                }
-
-            } catch (NumberFormatException e) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                resp.getWriter().write("{\"error\":\"ID inválido\"}");
+                ProductoDTO productoDTO = productoService.buscarProductoPorId(id);
+                mapper.writeValue(resp.getWriter(), productoDTO);
             }
+
+        } catch (NumberFormatException e) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().write("{\"error\":\"ID inválido. El ID debe ser un número.\"}"
+            );
+        } catch (Exception e) {
+            resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            resp.getWriter().write("{\"error\":\"" + e.getMessage() + "\"}");
         }
     }
 
     // =========================================================
-    // Crear un nuevo pedido
+    // POST (Crear)
     // =========================================================
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
@@ -81,48 +65,23 @@ public class ProductoServlet extends HttpServlet {
         resp.setContentType("application/json;charset=UTF-8");
 
         try {
-            PedidoDTO pedidoDTO = mapper.readValue(req.getInputStream(), PedidoDTO.class);
+            ProductoDTO productoDTO = mapper.readValue(req.getInputStream(), ProductoDTO.class);
+            ProductoService productoService = new ProductoService(productoDAO);
 
-            // Buscamos cliente por nombre (podrías cambiar a buscar por id si querés)
-            Cliente cliente = clienteDAO.listar().stream()
-                    .filter(c -> c.getNombre().equalsIgnoreCase(pedidoDTO.getClienteNombre()))
-                    .findFirst().orElse(null);
-
-            if (cliente == null) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                resp.getWriter().write("{\"error\":\"Cliente no encontrado\"}");
-                return;
-            }
-
-            List<Producto> productos = pedidoDTO.getProductos().stream()
-                    .map(dto -> productoDAO.listar().stream()
-                            .filter(p -> p.getNombre().equalsIgnoreCase(dto.getNombre()))
-                            .findFirst()
-                            .orElse(null))
-                    .filter(p -> p != null)
-                    .collect(Collectors.toList());
-
-            Pedido pedido = Pedido.builder()
-                    .cliente(cliente)
-                    .productos(productos)
-                    .fecha(LocalDate.now())
-                    .total(pedidoDTO.getTotal())
-                    .build();
-
-            pedidoDAO.guardar(pedido);
+            Producto producto = productoService.crearProductoDesdeDTO(productoDTO);
 
             resp.setStatus(HttpServletResponse.SC_CREATED);
-            mapper.writeValue(resp.getWriter(), MapperUtil.toPedidoDTO(pedido));
+            mapper.writeValue(resp.getWriter(), MapperUtil.toProductoDTO(producto));
 
         } catch (Exception e) {
             e.printStackTrace();
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"error\":\"Error al crear pedido\"}");
+            resp.getWriter().write("{\"error\":\"Error al crear producto: Revise el JSON enviado.\"}");
         }
     }
 
     // =========================================================
-    // Actualiza el pedido existente
+    // PUT (Actualizar)
     // =========================================================
     @Override
     protected void doPut(HttpServletRequest req, HttpServletResponse resp)
@@ -130,41 +89,39 @@ public class ProductoServlet extends HttpServlet {
 
         resp.setContentType("application/json;charset=UTF-8");
 
-        String pathInfo = req.getPathInfo(); // /id
+        String pathInfo = req.getPathInfo();
         if (pathInfo == null || pathInfo.equals("/")) {
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"error\":\"Debe especificar el ID\"}");
+            resp.getWriter().write("{\"error\":\"Debe especificar el ID del producto a actualizar.\"}");
             return;
         }
 
         try {
             Long id = Long.parseLong(pathInfo.substring(1));
-            Pedido pedidoExistente = pedidoDAO.buscarPorId(id);
+            ProductoDTO productoDTO = mapper.readValue(req.getInputStream(), ProductoDTO.class);
 
-            if (pedidoExistente == null) {
+            ProductoService productoService = new ProductoService(productoDAO);
+            ProductoDTO productoActualizado = productoService.actualizarProducto(id, productoDTO);
+
+            if (productoActualizado == null) {
                 resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                resp.getWriter().write("{\"error\":\"Pedido no encontrado\"}");
+                resp.getWriter().write("{\"error\":\"Producto no encontrado para actualizar.\"}");
                 return;
             }
 
-            PedidoDTO pedidoDTO = mapper.readValue(req.getInputStream(), PedidoDTO.class);
-
-            // Actualizar campos
-            pedidoExistente.setTotal(pedidoDTO.getTotal());
-            pedidoExistente.setFecha(LocalDate.now());
-
-            pedidoDAO.guardar(pedidoExistente); // como usamos persist, puede reemplazarse por merge()
-
-            mapper.writeValue(resp.getWriter(), MapperUtil.toPedidoDTO(pedidoExistente));
+            mapper.writeValue(resp.getWriter(), productoActualizado);
 
         } catch (NumberFormatException e) {
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"error\":\"ID inválido\"}");
+            resp.getWriter().write("{\"error\":\"ID inválido. El ID debe ser un número.\"}");
+        } catch (Exception e) {
+            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            resp.getWriter().write("{\"error\":\"Error inesperado al actualizar: " + e.getMessage() + "\"}");
         }
     }
 
     // =========================================================
-    // Borrar el pedido
+    // DELETE (Eliminar)
     // =========================================================
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp)
@@ -172,28 +129,29 @@ public class ProductoServlet extends HttpServlet {
 
         resp.setContentType("application/json;charset=UTF-8");
 
-        String pathInfo = req.getPathInfo(); // /id
+        String pathInfo = req.getPathInfo();
         if (pathInfo == null || pathInfo.equals("/")) {
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"error\":\"Debe especificar el ID\"}");
+            resp.getWriter().write("{\"error\":\"Debe especificar el ID del producto a eliminar.\"}");
             return;
         }
 
         try {
             Long id = Long.parseLong(pathInfo.substring(1));
-            Pedido pedido = pedidoDAO.buscarPorId(id);
 
-            if (pedido != null) {
-                pedidoDAO.eliminar(id);
-                resp.getWriter().write("{\"mensaje\":\"Pedido eliminado\"}");
+            ProductoService productoService = new ProductoService(productoDAO);
+            boolean eliminado = productoService.eliminarProducto(id);
+
+            if (eliminado) {
+                resp.getWriter().write("{\"mensaje\":\"Producto con ID " + id + " eliminado con éxito.\"}");
             } else {
                 resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                resp.getWriter().write("{\"error\":\"Pedido no encontrado\"}");
+                resp.getWriter().write("{\"error\":\"Producto no encontrado para eliminar.\"}");
             }
 
         } catch (NumberFormatException e) {
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"error\":\"ID inválido\"}");
+            resp.getWriter().write("{\"error\":\"ID inválido. El ID debe ser un número.\"}");
         }
     }
 }

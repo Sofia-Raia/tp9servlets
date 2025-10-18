@@ -28,6 +28,13 @@ public class ClienteDAO {
         em.close();
         return clientes;
     }
+    // Nuevo método para buscar por nombre
+    public Cliente buscarPorNombre(String nombre) {
+        return listar().stream()
+                .filter(c -> c.getNombre().equalsIgnoreCase(nombre))
+                .findFirst()
+                .orElse(null);
+    }
     public void eliminar(Long id) {
         EntityManager em = JpaUtil.getEntityManager();
         em.getTransaction().begin();
@@ -46,4 +53,5 @@ public class ClienteDAO {
         em.getTransaction().commit();
         em.close();
     }
+
 }

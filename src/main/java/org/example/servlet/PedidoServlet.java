@@ -12,14 +12,11 @@ import org.example.dao.PedidoDAO;
 import org.example.dao.ProductoDAO;
 import org.example.dto.PedidoDTO;
 import org.example.mapper.MapperUtil;
-import org.example.model.Cliente;
 import org.example.model.Pedido;
-import org.example.model.Producto;
-
+import org.example.service.PedidoService;
 import java.io.IOException;
-import java.time.LocalDate;
 import java.util.List;
-import java.util.stream.Collectors;
+
 
 @WebServlet("/pedidos/*")
 public class PedidoServlet extends HttpServlet {
@@ -27,51 +24,42 @@ public class PedidoServlet extends HttpServlet {
     private PedidoDAO pedidoDAO = new PedidoDAO();
     private ClienteDAO clienteDAO = new ClienteDAO();
     private ProductoDAO productoDAO = new ProductoDAO();
+    private PedidoService pedidoService = new PedidoService(clienteDAO,productoDAO,pedidoDAO);
     private ObjectMapper mapper = new ObjectMapper();
 
-    // =========================================================
-    // GET
-    // =========================================================
+    //Busca todos o por id
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
         resp.setContentType("application/json;charset=UTF-8");
 
+
+
         String pathInfo = req.getPathInfo(); // ej: /1 o null
 
-        if (pathInfo == null || pathInfo.equals("/")) {
-            // ---- Muestra todos ----
-            List<Pedido> pedidos = pedidoDAO.listar();
-            List<PedidoDTO> pedidosDTO = pedidos.stream()
-                    .map(MapperUtil::toPedidoDTO)
-                    .collect(Collectors.toList());
-            mapper.writeValue(resp.getWriter(), pedidosDTO);
-
-        } else {
-            // ---- Muestra por id ----
-            try {
+        try {
+            if (pathInfo == null || pathInfo.equals("/")) {
+                // ---- Listar todos ----
+                List<PedidoDTO> pedidosDTO = pedidoService.listarPedidos();
+                mapper.writeValue(resp.getWriter(), pedidosDTO);
+            } else {
+                // ---- Buscar por ID ----
                 Long id = Long.parseLong(pathInfo.substring(1));
-                Pedido pedido = pedidoDAO.buscarPorId(id);
-
-                if (pedido != null) {
-                    PedidoDTO dto = MapperUtil.toPedidoDTO(pedido);
-                    mapper.writeValue(resp.getWriter(), dto);
-                } else {
-                    resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                    resp.getWriter().write("{\"error\":\"Pedido no encontrado\"}");
-                }
-
-            } catch (NumberFormatException e) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                resp.getWriter().write("{\"error\":\"ID inválido\"}");
+                PedidoDTO pedidoDTO = pedidoService.buscarPedidoPorId(id);
+                mapper.writeValue(resp.getWriter(), pedidoDTO);
             }
+
+        } catch (NumberFormatException e) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().write("{\"error\":\"ID inválido\"}");
+
+        } catch (Exception e) {
+            resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            resp.getWriter().write("{\"error\":\"" + e.getMessage() + "\"}");
         }
     }
-
-    // =========================================================
-    // Crear un nuevo pedido
-    // =========================================================
+   //Crea
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
@@ -81,33 +69,9 @@ public class PedidoServlet extends HttpServlet {
         try {
             PedidoDTO pedidoDTO = mapper.readValue(req.getInputStream(), PedidoDTO.class);
 
-            // Buscamos cliente por nombre (podrías cambiar a buscar por id si querés)
-            Cliente cliente = clienteDAO.listar().stream()
-                    .filter(c -> c.getNombre().equalsIgnoreCase(pedidoDTO.getClienteNombre()))
-                    .findFirst().orElse(null);
+            PedidoService pedidoService = new PedidoService(clienteDAO, productoDAO, pedidoDAO);
 
-            if (cliente == null) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                resp.getWriter().write("{\"error\":\"Cliente no encontrado\"}");
-                return;
-            }
-
-            List<Producto> productos = pedidoDTO.getProductos().stream()
-                    .map(dto -> productoDAO.listar().stream()
-                            .filter(p -> p.getNombre().equalsIgnoreCase(dto.getNombre()))
-                            .findFirst()
-                            .orElse(null))
-                    .filter(p -> p != null)
-                    .collect(Collectors.toList());
-
-            Pedido pedido = Pedido.builder()
-                    .cliente(cliente)
-                    .productos(productos)
-                    .fecha(LocalDate.now())
-                    .total(pedidoDTO.getTotal())
-                    .build();
-
-            pedidoDAO.guardar(pedido);
+            Pedido pedido = pedidoService.crearPedidoDesdeDTO(pedidoDTO);
 
             resp.setStatus(HttpServletResponse.SC_CREATED);
             mapper.writeValue(resp.getWriter(), MapperUtil.toPedidoDTO(pedido));
@@ -115,62 +79,54 @@ public class PedidoServlet extends HttpServlet {
         } catch (Exception e) {
             e.printStackTrace();
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"error\":\"Error al crear pedido\"}");
+            resp.getWriter().write("{\"error\":\"" + e.getMessage() + "\"}");
         }
     }
 
-    // =========================================================
-    // Actualiza el pedido existente
-    // =========================================================
-    @Override
-    protected void doPut(HttpServletRequest req, HttpServletResponse resp)
-            throws ServletException, IOException {
+   //Actualiza
+   @Override
+   protected void doPut(HttpServletRequest req, HttpServletResponse resp)
+           throws ServletException, IOException {
 
-        resp.setContentType("application/json;charset=UTF-8");
+       resp.setContentType("application/json;charset=UTF-8");
 
-        String pathInfo = req.getPathInfo(); // /id
-        if (pathInfo == null || pathInfo.equals("/")) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"error\":\"Debe especificar el ID\"}");
-            return;
-        }
+       String pathInfo = req.getPathInfo();
+       if (pathInfo == null || pathInfo.equals("/")) {
+           resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+           resp.getWriter().write("{\"error\":\"Debe especificar el ID\"}");
+           return;
+       }
 
-        try {
-            Long id = Long.parseLong(pathInfo.substring(1));
-            Pedido pedidoExistente = pedidoDAO.buscarPorId(id);
+       try {
+           Long id = Long.parseLong(pathInfo.substring(1));
+           PedidoDTO pedidoDTO = mapper.readValue(req.getInputStream(), PedidoDTO.class);
 
-            if (pedidoExistente == null) {
-                resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                resp.getWriter().write("{\"error\":\"Pedido no encontrado\"}");
-                return;
-            }
+           PedidoDTO pedidoActualizado = pedidoService.actualizarPedido(id, pedidoDTO);
 
-            PedidoDTO pedidoDTO = mapper.readValue(req.getInputStream(), PedidoDTO.class);
+           if (pedidoActualizado == null) {
+               resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+               resp.getWriter().write("{\"error\":\"Pedido no encontrado\"}");
+               return;
+           }
 
-            // Actualizar campos
-            pedidoExistente.setTotal(pedidoDTO.getTotal());
-            pedidoExistente.setFecha(LocalDate.now());
+           mapper.writeValue(resp.getWriter(), pedidoActualizado);
 
-            pedidoDAO.guardar(pedidoExistente); // como usamos persist, puede reemplazarse por merge()
+       } catch (NumberFormatException e) {
+           resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+           resp.getWriter().write("{\"error\":\"ID inválido\"}");
+       } catch (Exception e) {
+           throw new RuntimeException(e);
+       }
+   }
 
-            mapper.writeValue(resp.getWriter(), MapperUtil.toPedidoDTO(pedidoExistente));
-
-        } catch (NumberFormatException e) {
-            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"error\":\"ID inválido\"}");
-        }
-    }
-
-    // =========================================================
-    // Borrar el pedido
-    // =========================================================
+    //Eliminar
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
 
         resp.setContentType("application/json;charset=UTF-8");
 
-        String pathInfo = req.getPathInfo(); // /id
+        String pathInfo = req.getPathInfo();
         if (pathInfo == null || pathInfo.equals("/")) {
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             resp.getWriter().write("{\"error\":\"Debe especificar el ID\"}");
@@ -179,10 +135,10 @@ public class PedidoServlet extends HttpServlet {
 
         try {
             Long id = Long.parseLong(pathInfo.substring(1));
-            Pedido pedido = pedidoDAO.buscarPorId(id);
 
-            if (pedido != null) {
-                pedidoDAO.eliminar(id);
+            boolean eliminado = pedidoService.eliminarPedido(id);
+
+            if (eliminado) {
                 resp.getWriter().write("{\"mensaje\":\"Pedido eliminado\"}");
             } else {
                 resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
@@ -194,4 +150,5 @@ public class PedidoServlet extends HttpServlet {
             resp.getWriter().write("{\"error\":\"ID inválido\"}");
         }
     }
+
 }

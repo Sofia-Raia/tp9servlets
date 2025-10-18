@@ -1,7 +1,4 @@
 package org.example.servlet;
-//La capa servlet cumple el papel de controlador,es decir, recibe las peticiones HTTP
-//es la “puerta de entrada” del backend.
-
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
@@ -11,29 +8,24 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.example.dao.ClienteDAO;
 import org.example.dao.PedidoDAO;
-import org.example.dao.ProductoDAO;
 import org.example.dto.ClienteDTO;
-import org.example.dto.PedidoDTO;
 import org.example.mapper.MapperUtil;
 import org.example.model.Cliente;
-import org.example.model.Pedido;
-import org.example.model.Producto;
+import org.example.service.ClienteService;
 
 import java.io.IOException;
-import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @WebServlet("/clientes/*")
 public class ClienteServlet extends HttpServlet {
 
-    private PedidoDAO pedidoDAO = new PedidoDAO();
-    private ClienteDAO clienteDAO = new ClienteDAO();
-    private ObjectMapper mapper = new ObjectMapper();
+    // Mantener las instancias DAO para pasarlas al Service.
+    private final ClienteDAO clienteDAO = new ClienteDAO();
+    private final PedidoDAO pedidoDAO = new PedidoDAO();
+    private final ObjectMapper mapper = new ObjectMapper();
 
     // =========================================================
-    // GET
+    // GET (Buscar todos o por ID)
     // =========================================================
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
@@ -41,39 +33,33 @@ public class ClienteServlet extends HttpServlet {
 
         resp.setContentType("application/json;charset=UTF-8");
 
-        String pathInfo = req.getPathInfo(); // ej: /1 o null
+        // Usamos el constructor simplificado para GET
+        ClienteService clienteService = new ClienteService(clienteDAO);
+        String pathInfo = req.getPathInfo();
 
-        if (pathInfo == null || pathInfo.equals("/")) {
-            // ---- Muestra todos ----
-            List<Cliente> clientes = clienteDAO.listar();
-            List<ClienteDTO> clientesDTO = clientes.stream()
-                    .map(MapperUtil::toClienteDTO)
-                    .collect(Collectors.toList());
-            mapper.writeValue(resp.getWriter(), clientesDTO);
-
-        } else {
-            // ---- Muestra por id ----
-            try {
+        try {
+            if (pathInfo == null || pathInfo.equals("/")) {
+                // ---- Listar todos ----
+                List<ClienteDTO> clientesDTO = clienteService.listarClientes();
+                mapper.writeValue(resp.getWriter(), clientesDTO);
+            } else {
+                // ---- Buscar por ID ----
                 Long id = Long.parseLong(pathInfo.substring(1));
-                Cliente cliente = clienteDAO.buscarPorId(id);
-
-                if (cliente != null) {
-                    ClienteDTO dto = MapperUtil.toClienteDTO(cliente);
-                    mapper.writeValue(resp.getWriter(), dto);
-                } else {
-                    resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
-                    resp.getWriter().write("{\"error\":\"Cliente no encontrado\"}");
-                }
-
-            } catch (NumberFormatException e) {
-                resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-                resp.getWriter().write("{\"error\":\"ID inválido\"}");
+                ClienteDTO clienteDTO = clienteService.buscarClientePorId(id);
+                mapper.writeValue(resp.getWriter(), clienteDTO);
             }
+
+        } catch (NumberFormatException e) {
+            resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+            resp.getWriter().write("{\"error\":\"ID inválido\"}");
+        } catch (Exception e) {
+            resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            resp.getWriter().write("{\"error\":\"" + e.getMessage() + "\"}");
         }
     }
 
     // =========================================================
-    // Crear un nuevo pedido
+    // POST (Crear)
     // =========================================================
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
@@ -83,16 +69,9 @@ public class ClienteServlet extends HttpServlet {
 
         try {
             ClienteDTO clienteDTO = mapper.readValue(req.getInputStream(), ClienteDTO.class);
+            ClienteService clienteService = new ClienteService(clienteDAO); // Constructor simplificado
 
-            Cliente cliente = Cliente.builder()
-
-                    .nombre(clienteDTO.getNombre())
-                    .email(clienteDTO.getEmail())
-                    .telefono(clienteDTO.getTelefono())
-                    .pedidos(new ArrayList<>())
-                    .build();
-
-            clienteDAO.guardar(cliente);
+            Cliente cliente = clienteService.crearClienteDesdeDTO(clienteDTO);
 
             resp.setStatus(HttpServletResponse.SC_CREATED);
             mapper.writeValue(resp.getWriter(), MapperUtil.toClienteDTO(cliente));
@@ -100,12 +79,12 @@ public class ClienteServlet extends HttpServlet {
         } catch (Exception e) {
             e.printStackTrace();
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
-            resp.getWriter().write("{\"error\":\"Error al crear el cliente\"}");
+            resp.getWriter().write("{\"error\":\"Error al crear el cliente: " + e.getMessage() + "\"}");
         }
     }
 
     // =========================================================
-    // Actualizar
+    // PUT (Actualizar)
     // =========================================================
     @Override
     protected void doPut(HttpServletRequest req, HttpServletResponse resp)
@@ -113,7 +92,7 @@ public class ClienteServlet extends HttpServlet {
 
         resp.setContentType("application/json;charset=UTF-8");
 
-        String pathInfo = req.getPathInfo(); // /id
+        String pathInfo = req.getPathInfo();
         if (pathInfo == null || pathInfo.equals("/")) {
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             resp.getWriter().write("{\"error\":\"Debe especificar el ID\"}");
@@ -122,37 +101,31 @@ public class ClienteServlet extends HttpServlet {
 
         try {
             Long id = Long.parseLong(pathInfo.substring(1));
-            Cliente clienteExistente = clienteDAO.buscarPorId(id);
+            ClienteDTO clienteDTO = mapper.readValue(req.getInputStream(), ClienteDTO.class);
 
-            if (clienteExistente == null) {
+            // Usamos el constructor completo ya que PUT puede implicar actualizar la lista de pedidos
+            ClienteService clienteService = new ClienteService(clienteDAO, pedidoDAO);
+            ClienteDTO clienteActualizado = clienteService.actualizarCliente(id, clienteDTO);
+
+            if (clienteActualizado == null) {
                 resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
                 resp.getWriter().write("{\"error\":\"Cliente no encontrado\"}");
                 return;
             }
 
-            ClienteDTO cDTO = mapper.readValue(req.getInputStream(), ClienteDTO.class);
-
-            // Actualizar campos
-            clienteExistente.setNombre(cDTO.getNombre());
-            clienteExistente.setTelefono(cDTO.getTelefono());
-            clienteExistente.setEmail(cDTO.getEmail());
-            clienteExistente.setPedidos(cDTO.getPedidos().stream()
-                    .map(pedidoDTO -> pedidoDAO.buscarPorId(pedidoDTO.getId()))
-                    .collect(Collectors.toList())
-            );
-
-            clienteDAO.actualizar(clienteExistente); // como usamos persist, puede reemplazarse por merge()
-
-            mapper.writeValue(resp.getWriter(), MapperUtil.toClienteDTO(clienteExistente));
+            mapper.writeValue(resp.getWriter(), clienteActualizado);
 
         } catch (NumberFormatException e) {
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             resp.getWriter().write("{\"error\":\"ID inválido\"}");
+        } catch (Exception e) {
+            resp.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            resp.getWriter().write("{\"error\":\"Error inesperado al actualizar: " + e.getMessage() + "\"}");
         }
     }
 
     // =========================================================
-    // Borrar el pedido
+    // DELETE (Eliminar)
     // =========================================================
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp)
@@ -160,7 +133,7 @@ public class ClienteServlet extends HttpServlet {
 
         resp.setContentType("application/json;charset=UTF-8");
 
-        String pathInfo = req.getPathInfo(); // /id
+        String pathInfo = req.getPathInfo();
         if (pathInfo == null || pathInfo.equals("/")) {
             resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
             resp.getWriter().write("{\"error\":\"Debe especificar el ID\"}");
@@ -169,10 +142,11 @@ public class ClienteServlet extends HttpServlet {
 
         try {
             Long id = Long.parseLong(pathInfo.substring(1));
-            Cliente cliente = clienteDAO.buscarPorId(id);
 
-            if (cliente != null) {
-                clienteDAO.eliminar(id);
+            ClienteService clienteService = new ClienteService(clienteDAO); // Constructor simplificado
+            boolean eliminado = clienteService.eliminarCliente(id);
+
+            if (eliminado) {
                 resp.getWriter().write("{\"mensaje\":\"Cliente eliminado\"}");
             } else {
                 resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
