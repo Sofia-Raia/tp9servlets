@@ -5,6 +5,11 @@ import org.example.model.Cliente;
 import org.example.model.Pedido;
 
 import java.util.List;
+/**
+* Implementación del patrón Data Access Object (DAO) para la entidad Cliente
+* Esta clase centraliza y encapsula toda la lógica de acceso y persistencia
+* de datos (CRUD) relacionada con los objetos Cliente.
+ */
 public class ClienteDAO {
 
     public void guardar(Cliente cliente) {

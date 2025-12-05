@@ -10,7 +10,11 @@ import org.example.model.Pedido;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
-
+/**
+ * La capa de Servicio gestiona la lógica de negocio de Clientes.
+ * Esta clase actúa como un intermediario entre la capa de
+ * Servlets y la capa de acceso a datos DAOs.
+ */
 public class ClienteService {
     private final ClienteDAO clienteDAO;
     private final PedidoDAO pedidoDAO;

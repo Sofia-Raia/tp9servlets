@@ -15,7 +15,17 @@ import org.example.service.ClienteService;
 
 import java.io.IOException;
 import java.util.List;
-
+/**
+ * Servlet (Controlador) que maneja las peticiones HTTP para el recurso /clientes.
+ *
+ * Es la "puerta de entrada" de la API. Se encarga de:
+ * - Recibir las peticiones CRUD (GET, POST, PUT, DELETE).
+ * - Leer la URL para obtener IDs (ej: /clientes/1).
+ * - Convertir el JSON (del request) a objetos ClienteDTO.
+ * - Llamar a la capa de Servicio (ClienteService) para que haga el trabajo.
+ * - Convertir la respuesta (DTOs o errores) de vuelta a JSON.
+ * - Manejar los códigos de estado HTTP (200, 201, 404, etc.).
+ */
 @WebServlet("/clientes/*")
 public class ClienteServlet extends HttpServlet {
 
@@ -24,13 +34,12 @@ public class ClienteServlet extends HttpServlet {
     private final PedidoDAO pedidoDAO = new PedidoDAO();
     private final ObjectMapper mapper = new ObjectMapper();
 
-    // =========================================================
+
     // GET (Buscar todos o por ID)
-    // =========================================================
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
-
+        //envia un json y le pide que lo interprete con charset=UTF-8
         resp.setContentType("application/json;charset=UTF-8");
 
         // Usamos el constructor simplificado para GET
@@ -58,9 +67,8 @@ public class ClienteServlet extends HttpServlet {
         }
     }
 
-    // =========================================================
+
     // POST (Crear)
-    // =========================================================
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
@@ -83,9 +91,7 @@ public class ClienteServlet extends HttpServlet {
         }
     }
 
-    // =========================================================
     // PUT (Actualizar)
-    // =========================================================
     @Override
     protected void doPut(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {
@@ -124,9 +130,8 @@ public class ClienteServlet extends HttpServlet {
         }
     }
 
-    // =========================================================
+
     // DELETE (Eliminar)
-    // =========================================================
     @Override
     protected void doDelete(HttpServletRequest req, HttpServletResponse resp)
             throws ServletException, IOException {

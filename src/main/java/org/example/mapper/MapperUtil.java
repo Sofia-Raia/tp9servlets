@@ -9,7 +9,7 @@ import org.example.model.Producto;
 import org.example.util.FuncionApp;
 
 import java.util.stream.Collectors;
-//convierte las entidades JPA a DTOs
+///convierte las entidades JPA a DTOs
 public class MapperUtil {
     public static ProductoDTO toProductoDTO(Producto producto) {
         return ProductoDTO.builder()
@@ -19,6 +19,7 @@ public class MapperUtil {
     }
     public static PedidoDTO toPedidoDTO(Pedido pedido) {
         return PedidoDTO.builder()
+                .id(pedido.getId())
                 .clienteNombre(pedido.getCliente().getNombre())
                 .productos(pedido.getProductos().stream()
                         .map(MapperUtil::toProductoDTO)

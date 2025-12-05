@@ -18,11 +18,11 @@ public class Pedido {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
     // Relación con Cliente (muchos pedidos -> un cliente)
-    @ManyToOne
-    @JoinColumn(name = "cliente_id")
+    @ManyToOne (fetch = FetchType.EAGER)
+    @JoinColumn(name = "cliente_id" )
     private Cliente cliente;
     // Relación unidireccional: Pedido -> Producto
-    @ManyToMany
+    @ManyToMany (fetch = FetchType.EAGER)
     @JoinColumn(name = "pedido_id") // crea la FK en la tabla de Producto
     private List<Producto> productos;
     private LocalDate fecha;

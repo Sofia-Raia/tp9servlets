@@ -7,9 +7,6 @@ public class FuncionApp {
     /**
      * Convierte una fecha de tipo LocalDate a String con formato dd/MM/yyyy.
      * Si la fecha es null, devuelve una cadena vacía.
-     *
-     * @param fecha LocalDate a convertir
-     * @return String con la fecha formateada
      */
     public static String getFechaString(LocalDate fecha) {
         if (fecha == null) {
